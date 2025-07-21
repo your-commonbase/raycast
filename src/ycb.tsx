@@ -1,6 +1,9 @@
-import { ActionPanel, Action, List, getPreferenceValues, showToast, Toast } from "@raycast/api";
+import { ActionPanel, Action, List, getPreferenceValues, showToast, Toast, Clipboard } from "@raycast/api";
 import { useState, useCallback, useEffect } from "react";
 import { instantMeiliSearch } from "@meilisearch/instant-meilisearch";
+import { writeFileSync, mkdtempSync } from "fs";
+import { tmpdir } from "os";
+import { join } from "path";
 
 interface Preferences {
   apiKey: string;
@@ -253,6 +256,49 @@ export default function Command() {
     return `${baseUrl}/dashboard/entry/${id}`;
   };
 
+  // Handle copying image to clipboard
+  const handleCopyImage = async (imageUrl: string) => {
+    try {
+      showToast({
+        style: Toast.Style.Animated,
+        title: "Copying image...",
+      });
+      
+      const response = await fetch(imageUrl);
+      const arrayBuffer = await response.arrayBuffer();
+      const buffer = Buffer.from(arrayBuffer);
+      
+      // Get file extension from content-type or URL
+      const contentType = response.headers.get('content-type') || '';
+      let extension = '.jpg';
+      if (contentType.includes('png')) extension = '.png';
+      else if (contentType.includes('gif')) extension = '.gif';
+      else if (contentType.includes('webp')) extension = '.webp';
+      
+      // Create temporary file
+      const tempDir = mkdtempSync(join(tmpdir(), 'ycb-'));
+      const tempFilePath = join(tempDir, `image${extension}`);
+      writeFileSync(tempFilePath, buffer);
+      
+      await Clipboard.copy({
+        file: tempFilePath,
+      });
+      
+      showToast({
+        style: Toast.Style.Success,
+        title: "Image copied to clipboard",
+      });
+    } catch (error) {
+      console.error('Failed to copy image:', error);
+      showToast({
+        style: Toast.Style.Failure,
+        title: "Failed to copy image",
+        message: "Copying image URL instead",
+      });
+      await Clipboard.copy(imageUrl);
+    }
+  };
+
   return (
     <List
       isLoading={isLoadingMeiliSearch || isLoadingSemanticSearch}
@@ -279,11 +325,19 @@ export default function Command() {
                       title="Open Entry"
                       url={getEntryUrl(result.id)}
                     />
-                    <Action.CopyToClipboard
-                      title="Copy Content"
-                      content={result.data}
-                      shortcut={{ modifiers: ["cmd", "shift"], key: "enter" }}
-                    />
+                    {result.metadata?.type === "image" && result.image ? (
+                      <Action
+                        title="Copy Image"
+                        onAction={() => handleCopyImage(result.image!)}
+                        shortcut={{ modifiers: ["cmd", "shift"], key: "enter" }}
+                      />
+                    ) : (
+                      <Action.CopyToClipboard
+                        title="Copy Content"
+                        content={result.data}
+                        shortcut={{ modifiers: ["cmd", "shift"], key: "enter" }}
+                      />
+                    )}
                     {result.metadata?.author && (
                       <>
                         <Action.CopyToClipboard
@@ -332,11 +386,19 @@ export default function Command() {
                       onAction={handleEnterPress}
                       shortcut={{ modifiers: ["cmd"], key: "s" }}
                     />
-                    <Action.CopyToClipboard
-                      title="Copy Content"
-                      content={result.data}
-                      shortcut={{ modifiers: ["cmd", "shift"], key: "enter" }}
-                    />
+                    {result.metadata?.type === "image" && result.image ? (
+                      <Action
+                        title="Copy Image"
+                        onAction={() => handleCopyImage(result.image!)}
+                        shortcut={{ modifiers: ["cmd", "shift"], key: "enter" }}
+                      />
+                    ) : (
+                      <Action.CopyToClipboard
+                        title="Copy Content"
+                        content={result.data}
+                        shortcut={{ modifiers: ["cmd", "shift"], key: "enter" }}
+                      />
+                    )}
                     {result.metadata?.author && (
                       <>
                         <Action.CopyToClipboard
